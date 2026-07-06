@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 moviebox-api
-pydantic==2.9.2
+pydantic
 httpx
 beautifulsoup4
 throttlebuster
