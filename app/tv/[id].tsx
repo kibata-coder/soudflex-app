@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -10,11 +9,13 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTVShowDetails, useTVSeasonDetails } from '../../hooks/use-tmdb';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { getBackdropUrl, getImageUrl } from '../../lib/tmdb';
+import { getProviders, getTVShowEmbedUrl } from '../../lib/vidsrc';
 import { Colors, Spacing, FontSize, Radius } from '../../constants/theme';
 
 const { width, height } = Dimensions.get('window');
@@ -26,6 +27,7 @@ export default function TVDetailScreen() {
   const { data: show, isLoading, isError } = useTVShowDetails(tvId);
   const [selectedSeason, setSelectedSeason] = useState(1);
   const { data: seasonData } = useTVSeasonDetails(tvId, selectedSeason);
+  const [selectedServerIndex, setSelectedServerIndex] = useState(0);
 
   if (isLoading) {
     return (
@@ -56,10 +58,11 @@ export default function TVDetailScreen() {
   const episodes = seasonData?.episodes || [];
 
   const handleEpisodePress = (epNum: number) => {
+    if (!tvId) return;
     router.push({
       pathname: '/player',
       params: {
-        url: `https://megaplay.buzz/stream/tmdb/tv/${tvId}/${selectedSeason}/${epNum}`,
+        url: getTVShowEmbedUrl(tvId, selectedSeason, epNum, selectedServerIndex),
         title: show.name,
         subtitle: `S${selectedSeason} E${epNum}`,
       },
@@ -110,6 +113,34 @@ export default function TVDetailScreen() {
                 </View>
               )}
             </View>
+          </View>
+
+          {/* Server picker */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Server</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.serverRow}>
+                {getProviders().map((provider, index) => (
+                  <TouchableOpacity
+                    key={provider.id}
+                    style={[
+                      styles.serverBtn,
+                      selectedServerIndex === index && styles.serverBtnActive,
+                    ]}
+                    onPress={() => setSelectedServerIndex(index)}
+                  >
+                    <Text
+                      style={[
+                        styles.serverBtnText,
+                        selectedServerIndex === index && styles.serverBtnTextActive,
+                      ]}
+                    >
+                      {provider.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
           </View>
 
           {/* Season picker */}
@@ -254,6 +285,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: Spacing.md,
   },
+  serverRow: { flexDirection: 'row', gap: Spacing.sm },
+  serverBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.bgElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  serverBtnActive: { backgroundColor: Colors.primaryDim, borderColor: Colors.primary },
+  serverBtnText: { color: Colors.textMuted, fontWeight: '700', fontSize: FontSize.sm },
+  serverBtnTextActive: { color: Colors.primary },
   seasonRow: { flexDirection: 'row', gap: Spacing.sm },
   seasonBtn: {
     paddingHorizontal: Spacing.lg,

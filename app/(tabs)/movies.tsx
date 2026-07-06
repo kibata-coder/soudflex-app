@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
   FlatList,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTrendingMovies, useActionMovies, useAdventureMovies, useComedyMovies, useDramaMovies, useSciFiMovies, useMovieSearch } from '../../hooks/use-tmdb';
 import MediaCard from '../../components/MediaCard';

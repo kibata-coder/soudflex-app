@@ -4,11 +4,15 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   Platform,
   StatusBar,
+  Alert,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
+import { Download, X } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors, FontSize, Spacing, Radius } from '../constants/theme';
 
@@ -19,14 +23,49 @@ export default function PlayerScreen() {
     subtitle?: string;
   }>();
   const router = useRouter();
-  const webViewRef = useRef<WebView>(null);
-  const [controlsVisible, setControlsVisible] = useState(true);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
 
-  const showControls = () => {
-    setControlsVisible(true);
-    if (hideTimer.current) clearTimeout(hideTimer.current);
-    hideTimer.current = setTimeout(() => setControlsVisible(false), 4000);
+  const player = useVideoPlayer(url || '', player => {
+    player.loop = false;
+    player.play();
+  });
+
+  const downloadContent = async () => {
+    if (!url) return;
+    
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Please allow media library access to save downloads.');
+        return;
+      }
+
+      setIsDownloading(true);
+      const filename = `${title?.replace(/[^a-zA-Z0-9]/g, '_') || 'video'}.mp4`;
+      const fileUri = FileSystem.documentDirectory + filename;
+      
+      const downloadResumable = FileSystem.createDownloadResumable(
+        url,
+        fileUri,
+        {},
+        (downloadProgress) => {
+          const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
+          setDownloadProgress(progress);
+        }
+      );
+
+      const result = await downloadResumable.downloadAsync();
+      if (result) {
+        await MediaLibrary.saveToLibraryAsync(result.uri);
+        Alert.alert('Success', 'Video downloaded to your gallery!');
+      }
+    } catch (error: any) {
+      Alert.alert('Download Error', error.message);
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(0);
+    }
   };
 
   if (!url) {
@@ -46,47 +85,41 @@ export default function PlayerScreen() {
     <View style={styles.container}>
       <StatusBar hidden />
 
-      {/* WebView — MegaPlay embedded player */}
-      <WebView
-        ref={webViewRef}
-        source={{ uri: url }}
-        style={styles.webview}
-        allowsFullscreenVideo
-        mediaPlaybackRequiresUserAction={false}
-        allowsInlineMediaPlayback
-        javaScriptEnabled
-        domStorageEnabled
-        onTouchStart={showControls}
-        userAgent={
-          Platform.OS === 'android'
-            ? 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36'
-            : undefined
-        }
+      <VideoView 
+        player={player} 
+        style={styles.video} 
+        allowsFullscreen 
+        allowsPictureInPicture 
+        nativeControls 
       />
 
-      {/* Overlay controls */}
-      {controlsVisible && (
+      {/* Top bar Overlay */}
+      <View style={styles.topBar}>
         <TouchableOpacity
-          activeOpacity={1}
-          style={styles.controlsOverlay}
-          onPress={showControls}
+          style={styles.closeBtn}
+          onPress={() => router.back()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          {/* Top bar */}
-          <View style={styles.topBar}>
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={() => router.back()}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              <Text style={styles.closeBtnText}>✕</Text>
-            </TouchableOpacity>
-            <View style={styles.titleContainer}>
-              {title && <Text style={styles.playerTitle} numberOfLines={1}>{title}</Text>}
-              {subtitle && <Text style={styles.playerSubtitle} numberOfLines={1}>{subtitle}</Text>}
-            </View>
-          </View>
+          <X color="#fff" size={20} />
         </TouchableOpacity>
-      )}
+        
+        <View style={styles.titleContainer}>
+          {title && <Text style={styles.playerTitle} numberOfLines={1}>{title}</Text>}
+          {subtitle && <Text style={styles.playerSubtitle} numberOfLines={1}>{subtitle}</Text>}
+        </View>
+
+        <TouchableOpacity 
+          style={styles.downloadBtn} 
+          onPress={downloadContent}
+          disabled={isDownloading}
+        >
+          {isDownloading ? (
+            <Text style={styles.downloadText}>{Math.round(downloadProgress * 100)}%</Text>
+          ) : (
+            <Download color="#fff" size={20} />
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -96,17 +129,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  webview: {
+  video: {
     flex: 1,
-    backgroundColor: '#000',
-  },
-  controlsOverlay: {
-    position: 'absolute',
-    inset: 0,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
   topBar: {
     position: 'absolute',
@@ -118,10 +142,9 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 50 : Spacing.xl,
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.xl,
-    backgroundColor: 'rgba(0,0,0,0)',
     gap: Spacing.md,
-    // Gradient-like top overlay
-    backgroundImage: undefined,
+    // Add gradient or dark background so text is readable over video
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   closeBtn: {
     width: 36,
@@ -132,19 +155,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
-    flexShrink: 0,
   },
-  closeBtnText: {
+  downloadBtn: {
+    width: 36,
+    height: 36,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  downloadText: {
     color: '#fff',
-    fontSize: FontSize.md,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   titleContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
   },
   playerTitle: {
     color: '#fff',

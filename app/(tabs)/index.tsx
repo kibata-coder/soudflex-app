@@ -4,13 +4,13 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
   TextInput,
   TouchableOpacity,
   Image,
   Dimensions,
   FlatList,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTrendingMovies, useTrendingTV, useMovieSearch, useTVSearch } from '../../hooks/use-tmdb';
